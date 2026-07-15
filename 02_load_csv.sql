@@ -1,68 +1,126 @@
+-- Load 5 Ontario public health CSV files into raw landing tables from internal stage.
+-- Co-authored with CoCo
 /*=============================================================================
-  HANDS-ON LAB: Toronto Shelter Occupancy Data Pipeline
+  Ontario Public Health Intelligence Agent
   Step 2 - Load CSV into Snowflake
   
-  This script loads the 3 yearly CSV files from the internal stage into 
-  a single raw landing table (~148,000 rows across 2023-2025).
+  This script loads 5 public health CSV files from the internal stage into
+  raw landing tables:
+    1. outbreak_cases     - Outbreak case counts by setting/category
+    2. outbreaks_by_phu   - Active outbreaks by Public Health Unit
+    3. ltc_summary_phu    - LTC outbreak summary by PHU
+    4. ltc_resolved       - Facility-level LTC details
+    5. hospital_icu       - Hospital/ICU burden by region
 =============================================================================*/
 
 USE ROLE ACCOUNTADMIN;
 USE WAREHOUSE OPS_HOL_WH;
-USE SCHEMA OPS_HACKATHON.HOMELESSNESS;
+USE SCHEMA OPS_HACKATHON.PUBLIC_HEALTH;
 
--- Create the raw landing table
-CREATE OR REPLACE TABLE SHELTER_OCCUPANCY_RAW (
-    _ID                     NUMBER,
-    OCCUPANCY_DATE          VARCHAR,
-    ORGANIZATION_ID         NUMBER,
-    ORGANIZATION_NAME       VARCHAR,
-    SHELTER_ID              NUMBER,
-    SHELTER_GROUP           VARCHAR,
-    LOCATION_ID             NUMBER,
-    LOCATION_NAME           VARCHAR,
-    LOCATION_ADDRESS        VARCHAR,
-    LOCATION_POSTAL_CODE    VARCHAR,
-    LOCATION_CITY           VARCHAR,
-    LOCATION_PROVINCE       VARCHAR,
-    PROGRAM_ID              NUMBER,
-    PROGRAM_NAME            VARCHAR,
-    SECTOR                  VARCHAR,
-    PROGRAM_MODEL           VARCHAR,
-    OVERNIGHT_SERVICE_TYPE  VARCHAR,
-    PROGRAM_AREA            VARCHAR,
-    SERVICE_USER_COUNT      NUMBER,
-    CAPACITY_TYPE           VARCHAR,
-    CAPACITY_ACTUAL_BED     NUMBER,
-    CAPACITY_FUNDING_BED    NUMBER,
-    OCCUPIED_BEDS           NUMBER,
-    UNOCCUPIED_BEDS         NUMBER,
-    UNAVAILABLE_BEDS        NUMBER,
-    CAPACITY_ACTUAL_ROOM    NUMBER,
-    CAPACITY_FUNDING_ROOM   NUMBER,
-    OCCUPIED_ROOMS          NUMBER,
-    UNOCCUPIED_ROOMS        NUMBER,
-    UNAVAILABLE_ROOMS       NUMBER,
-    OCCUPANCY_RATE_BEDS     FLOAT,
-    OCCUPANCY_RATE_ROOMS    FLOAT
+-- ==========================================================================
+-- TABLE 1: Outbreak Cases (what is spreading?)
+-- ==========================================================================
+CREATE OR REPLACE TABLE OUTBREAK_CASES_RAW (
+    DATE                VARCHAR,
+    CATEGORY_GROUPED    VARCHAR,
+    OUTBREAK_SUBGROUP   VARCHAR,
+    TOTAL_CASES         NUMBER
 );
 
--- Load all 3 yearly files from stage
-COPY INTO SHELTER_OCCUPANCY_RAW
-FROM @DATA_LOAD
+COPY INTO OUTBREAK_CASES_RAW
+FROM @DATA_LOAD/outbreak_cases.csv
 FILE_FORMAT = CSV_FORMAT
-PATTERN = '.*shelter_202[3-5].*\\.csv.*'
 ON_ERROR = 'CONTINUE';
 
--- Verify the load
-SELECT COUNT(*) AS ROW_COUNT FROM SHELTER_OCCUPANCY_RAW;
--- Expected: ~148,000 rows (48K + 49K + 52K across 3 years)
+SELECT COUNT(*) AS OUTBREAK_CASES_ROWS FROM OUTBREAK_CASES_RAW;
 
--- Quick sample to confirm data looks correct
-SELECT * FROM SHELTER_OCCUPANCY_RAW LIMIT 10;
+-- ==========================================================================
+-- TABLE 2: Outbreaks by PHU (where is it spreading?)
+-- ==========================================================================
+CREATE OR REPLACE TABLE OUTBREAKS_BY_PHU_RAW (
+    DATE                        VARCHAR,
+    PHU_NAME                    VARCHAR,
+    PHU_NUM                     NUMBER,
+    OUTBREAK_GROUP              VARCHAR,
+    NUMBER_ONGOING_OUTBREAKS    NUMBER
+);
 
--- Check date range covers all 3 years
-SELECT 
-    MIN(OCCUPANCY_DATE) AS EARLIEST_DATE,
-    MAX(OCCUPANCY_DATE) AS LATEST_DATE,
-    COUNT(DISTINCT LEFT(OCCUPANCY_DATE, 4)) AS NUM_YEARS
-FROM SHELTER_OCCUPANCY_RAW;
+COPY INTO OUTBREAKS_BY_PHU_RAW
+FROM @DATA_LOAD/outbreaks_by_phu.csv
+FILE_FORMAT = CSV_FORMAT
+ON_ERROR = 'CONTINUE';
+
+SELECT COUNT(*) AS OUTBREAKS_BY_PHU_ROWS FROM OUTBREAKS_BY_PHU_RAW;
+
+-- ==========================================================================
+-- TABLE 3: LTC Summary by PHU (how are vulnerable seniors affected?)
+-- ==========================================================================
+CREATE OR REPLACE TABLE LTC_SUMMARY_PHU_RAW (
+    REPORT_DATA_EXTRACTED               VARCHAR,
+    PHU_NUM                             NUMBER,
+    PHU                                 VARCHAR,
+    LTC_HOMES_WITH_ACTIVE_OUTBREAK      NUMBER,
+    LTC_HOMES_WITH_RESOLVED_OUTBREAK    NUMBER,
+    CONFIRMED_ACTIVE_LTC_RESIDENT_CASES NUMBER,
+    CONFIRMED_ACTIVE_LTC_HCW_CASES      NUMBER,
+    TOTAL_LTC_RESIDENT_DEATHS           NUMBER,
+    TOTAL_LTC_HCW_DEATHS                NUMBER
+);
+
+COPY INTO LTC_SUMMARY_PHU_RAW
+FROM @DATA_LOAD/ltc_summary_phu.csv
+FILE_FORMAT = CSV_FORMAT
+ON_ERROR = 'CONTINUE';
+
+SELECT COUNT(*) AS LTC_SUMMARY_ROWS FROM LTC_SUMMARY_PHU_RAW;
+
+-- ==========================================================================
+-- TABLE 4: LTC Resolved - Facility Level (which LTC homes are impacted?)
+-- ==========================================================================
+CREATE OR REPLACE TABLE LTC_RESOLVED_RAW (
+    REPORT_DATA_EXTRACTED       VARCHAR,
+    PHU_NUM                     NUMBER,
+    PHU                         VARCHAR,
+    LTC_HOME                    VARCHAR,
+    CITY                        VARCHAR,
+    BEDS                        NUMBER,
+    TOTAL_LTC_RESIDENT_DEATHS   NUMBER
+);
+
+COPY INTO LTC_RESOLVED_RAW
+FROM @DATA_LOAD/ltc_resolved.csv
+FILE_FORMAT = CSV_FORMAT
+ON_ERROR = 'CONTINUE';
+
+SELECT COUNT(*) AS LTC_RESOLVED_ROWS FROM LTC_RESOLVED_RAW;
+
+-- ==========================================================================
+-- TABLE 5: Hospital & ICU (what is the impact on hospitals?)
+-- ==========================================================================
+CREATE OR REPLACE TABLE HOSPITAL_ICU_RAW (
+    DATE                        VARCHAR,
+    OH_REGION                   VARCHAR,
+    ICU_CURRENT_COVID           NUMBER,
+    ICU_CURRENT_COVID_VENTED    NUMBER,
+    HOSPITALIZATIONS            NUMBER,
+    ICU_CRCI_TOTAL              NUMBER,
+    ICU_CRCI_TOTAL_VENTED       NUMBER,
+    ICU_FORMER_COVID            NUMBER,
+    ICU_FORMER_COVID_VENTED     NUMBER
+);
+
+COPY INTO HOSPITAL_ICU_RAW
+FROM @DATA_LOAD/hospital_icu.csv
+FILE_FORMAT = CSV_FORMAT
+ON_ERROR = 'CONTINUE';
+
+SELECT COUNT(*) AS HOSPITAL_ICU_ROWS FROM HOSPITAL_ICU_RAW;
+
+-- ==========================================================================
+-- VERIFY: Quick sample from each table
+-- ==========================================================================
+SELECT 'OUTBREAK_CASES' AS SOURCE, * FROM OUTBREAK_CASES_RAW LIMIT 3;
+SELECT 'OUTBREAKS_BY_PHU' AS SOURCE, * FROM OUTBREAKS_BY_PHU_RAW LIMIT 3;
+SELECT 'LTC_SUMMARY_PHU' AS SOURCE, * FROM LTC_SUMMARY_PHU_RAW LIMIT 3;
+SELECT 'LTC_RESOLVED' AS SOURCE, * FROM LTC_RESOLVED_RAW LIMIT 3;
+SELECT 'HOSPITAL_ICU' AS SOURCE, * FROM HOSPITAL_ICU_RAW LIMIT 3;

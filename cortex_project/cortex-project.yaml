@@ -1,0 +1,7 @@
+version: 1
+artifacts:
+  - path: PUBLIC_HEALTH_INTELLIGENCE.sv.yaml
+    type: semantic_view
+    targets:
+      default:
+        object: OPS_HACKATHON.PUBLIC_HEALTH.PUBLIC_HEALTH_INTELLIGENCE

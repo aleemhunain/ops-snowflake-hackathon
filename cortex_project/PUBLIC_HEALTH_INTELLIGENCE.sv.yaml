@@ -1,0 +1,182 @@
+name: PUBLIC_HEALTH_INTELLIGENCE
+description: Ontario Public Health Intelligence model covering outbreak activity by
+  setting and category, geographic spread by Public Health Unit, long-term care vulnerability
+  and mortality, and hospital/ICU capacity pressure. Supports disease monitoring,
+  geographic risk assessment, vulnerable population tracking, and healthcare burden
+  analysis.
+tables:
+  - name: OUTBREAK_CASES
+    base_table:
+      database: OPS_HACKATHON
+      schema: PUBLIC_HEALTH
+      table: OUTBREAK_CASES
+    dimensions:
+      - name: OUTBREAK_CATEGORY
+        expr: OUTBREAK_CATEGORY
+        data_type: VARCHAR
+      - name: OUTBREAK_SETTING
+        expr: OUTBREAK_SETTING
+        data_type: VARCHAR
+      - name: TOTAL_CASES
+        expr: TOTAL_CASES
+        data_type: NUMBER
+    time_dimensions:
+      - name: REPORT_DATE
+        expr: REPORT_DATE
+        data_type: DATE
+  - name: OUTBREAKS_BY_PHU
+    base_table:
+      database: OPS_HACKATHON
+      schema: PUBLIC_HEALTH
+      table: OUTBREAKS_BY_PHU
+    dimensions:
+      - name: PHU_NAME
+        expr: PHU_NAME
+        data_type: VARCHAR
+      - name: PHU_NUM
+        expr: PHU_NUM
+        data_type: NUMBER
+      - name: OUTBREAK_GROUP
+        expr: OUTBREAK_GROUP
+        data_type: VARCHAR
+      - name: ONGOING_OUTBREAKS
+        expr: ONGOING_OUTBREAKS
+        data_type: NUMBER
+    time_dimensions:
+      - name: REPORT_DATE
+        expr: REPORT_DATE
+        data_type: DATE
+  - name: LTC_SUMMARY_PHU
+    base_table:
+      database: OPS_HACKATHON
+      schema: PUBLIC_HEALTH
+      table: LTC_SUMMARY_PHU
+    dimensions:
+      - name: PHU_NUM
+        expr: PHU_NUM
+        data_type: NUMBER
+      - name: PHU_NAME
+        expr: PHU_NAME
+        data_type: VARCHAR
+      - name: ACTIVE_OUTBREAK_HOMES
+        expr: ACTIVE_OUTBREAK_HOMES
+        data_type: NUMBER
+      - name: RESOLVED_OUTBREAK_HOMES
+        expr: RESOLVED_OUTBREAK_HOMES
+        data_type: NUMBER
+      - name: RESIDENT_CASES
+        expr: RESIDENT_CASES
+        data_type: NUMBER
+      - name: HCW_CASES
+        expr: HCW_CASES
+        data_type: NUMBER
+      - name: RESIDENT_DEATHS
+        expr: RESIDENT_DEATHS
+        data_type: NUMBER
+      - name: HCW_DEATHS
+        expr: HCW_DEATHS
+        data_type: NUMBER
+    time_dimensions:
+      - name: REPORT_DATE
+        expr: REPORT_DATE
+        data_type: DATE
+  - name: LTC_RESOLVED
+    base_table:
+      database: OPS_HACKATHON
+      schema: PUBLIC_HEALTH
+      table: LTC_RESOLVED
+    dimensions:
+      - name: PHU_NUM
+        expr: PHU_NUM
+        data_type: NUMBER
+      - name: PHU_NAME
+        expr: PHU_NAME
+        data_type: VARCHAR
+      - name: LTC_HOME_NAME
+        expr: LTC_HOME_NAME
+        data_type: VARCHAR
+      - name: CITY
+        expr: CITY
+        data_type: VARCHAR
+      - name: BED_CAPACITY
+        expr: BED_CAPACITY
+        data_type: NUMBER
+      - name: RESIDENT_DEATHS
+        expr: RESIDENT_DEATHS
+        data_type: NUMBER
+    time_dimensions:
+      - name: REPORT_DATE
+        expr: REPORT_DATE
+        data_type: DATE
+  - name: HOSPITAL_ICU
+    base_table:
+      database: OPS_HACKATHON
+      schema: PUBLIC_HEALTH
+      table: HOSPITAL_ICU
+    dimensions:
+      - name: REGION
+        expr: REGION
+        data_type: VARCHAR
+      - name: ICU_COVID_PATIENTS
+        expr: ICU_COVID_PATIENTS
+        data_type: NUMBER
+      - name: ICU_COVID_VENTILATED
+        expr: ICU_COVID_VENTILATED
+        data_type: NUMBER
+      - name: HOSPITALIZATIONS
+        expr: HOSPITALIZATIONS
+        data_type: NUMBER
+      - name: ICU_TOTAL
+        expr: ICU_TOTAL
+        data_type: NUMBER
+      - name: ICU_TOTAL_VENTILATED
+        expr: ICU_TOTAL_VENTILATED
+        data_type: NUMBER
+      - name: ICU_FORMER_COVID
+        expr: ICU_FORMER_COVID
+        data_type: NUMBER
+      - name: ICU_FORMER_COVID_VENTILATED
+        expr: ICU_FORMER_COVID_VENTILATED
+        data_type: NUMBER
+    time_dimensions:
+      - name: REPORT_DATE
+        expr: REPORT_DATE
+        data_type: DATE
+verified_queries:
+  - name: 0;1
+    question: Which outbreak categories have the most cases?
+    sql: SELECT OUTBREAK_CATEGORY, SUM(TOTAL_CASES) AS TOTAL_CASES FROM outbreak_cases
+      GROUP BY OUTBREAK_CATEGORY ORDER BY TOTAL_CASES DESC
+    verified_at: 1784139595
+    verified_by: Semantic Model Generator
+  - name: 1;1
+    question: Which public health units currently have the most active outbreaks?
+    sql: SELECT PHU_NAME, SUM(ONGOING_OUTBREAKS) AS TOTAL_OUTBREAKS FROM outbreaks_by_phu
+      WHERE REPORT_DATE = (SELECT MAX(REPORT_DATE) FROM outbreaks_by_phu) GROUP BY
+      PHU_NAME ORDER BY TOTAL_OUTBREAKS DESC LIMIT 10
+    verified_at: 1784139595
+    verified_by: Semantic Model Generator
+  - name: 2;1
+    question: Which public health units have the highest long-term care resident deaths
+      in the most recent reporting period?
+    sql: SELECT PHU_NAME, ACTIVE_OUTBREAK_HOMES, RESIDENT_CASES, RESIDENT_DEATHS FROM
+      ltc_summary_phu WHERE REPORT_DATE = (SELECT MAX(REPORT_DATE) FROM ltc_summary_phu)
+      ORDER BY RESIDENT_DEATHS DESC LIMIT 10
+    verified_at: 1784139595
+    verified_by: Semantic Model Generator
+  - name: 3;1
+    question: Which long-term care homes have experienced the most resident deaths
+      in the most recent reporting period?
+    sql: SELECT LTC_HOME_NAME, CITY, PHU_NAME, BED_CAPACITY, RESIDENT_DEATHS FROM
+      ltc_resolved WHERE REPORT_DATE = (SELECT MAX(REPORT_DATE) FROM ltc_resolved)
+      ORDER BY RESIDENT_DEATHS DESC LIMIT 10
+    verified_at: 1784139595
+    verified_by: Semantic Model Generator
+  - name: 4;1
+    question: What is the recent trend in hospitalizations and ICU admissions over
+      the last 30 reporting periods?
+    sql: SELECT REPORT_DATE, SUM(HOSPITALIZATIONS) AS TOTAL_HOSPITALIZATIONS, SUM(ICU_COVID_PATIENTS)
+      AS TOTAL_ICU_COVID, SUM(ICU_COVID_VENTILATED) AS TOTAL_VENTILATED FROM hospital_icu
+      GROUP BY REPORT_DATE ORDER BY REPORT_DATE DESC LIMIT 30
+    verified_at: 1784139595
+    verified_by: Semantic Model Generator
